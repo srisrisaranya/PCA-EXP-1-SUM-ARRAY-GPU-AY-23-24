@@ -1,6 +1,6 @@
 # PCA: EXP-1  SUM ARRAY GPU
-<h3>NAME: SARANYA S P</h3>
-<h3>REGISTER NO:212223110044 </h3>
+<h3> NAME: SARANYA S </h3>
+<h3> REGISTER NO:212223110044 </h3>
 <h1> <align=center> EX.NO-1:SUM ARRAY ON HOST AND DEVICE </h3>
 PCA-GPU-based-vector-summation.-Explore-the-differences.
 i) Using the program sumArraysOnGPU-timer.cu, set the block.x = 1023. Recompile and run it. Compare the result with the execution configuration of block.x = 1024. Try to explain the difference and the reason.
