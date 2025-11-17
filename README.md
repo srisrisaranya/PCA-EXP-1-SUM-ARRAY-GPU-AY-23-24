@@ -1,7 +1,7 @@
 # PCA: EXP-1  SUM ARRAY GPU
 <h3> NAME: SARANYA S </h3>
 <h3> REGISTER NO: 212223110044 </h3>
-<h1> <align=center> EX.NO-1:SUM ARRAY ON HOST AND DEVICE </h3>
+<h1> <align=center> EX.NO-1: SUM ARRAY ON HOST AND DEVICE </h3>
     
 PCA-GPU-based-vector-summation.-Explore-the-differences.
 
