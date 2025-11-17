@@ -34,47 +34,29 @@ Google Colab with NVCC Compiler
 %%cuda
 #include <cuda_runtime.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/time.h>
 
-// -----------------------------------------------------------
-// Error checking macro
-// -----------------------------------------------------------
 #define CHECK(call)                                                      \
 {                                                                        \
-    const cudaError_t error = call;                                      \
-    if (error != cudaSuccess)                                            \
-    {                                                                    \
-        printf("Error: %s:%d, ", __FILE__, __LINE__);                    \
-        printf("code: %d, reason: %s\n", error, cudaGetErrorString(error)); \
-        exit(1);                                                         \
+    cudaError_t err = call;                                              \
+    if (err != cudaSuccess) {                                            \
+        fprintf(stderr, "CUDA error at %s %d: %s\n",                     \
+                __FILE__, __LINE__, cudaGetErrorString(err));            \
+        exit(EXIT_FAILURE);                                              \
     }                                                                    \
 }
 
-// -----------------------------------------------------------
-// Timer function
-// -----------------------------------------------------------
-double seconds()
-{
-    struct timeval tp;
-    gettimeofday(&tp, NULL);
-    return ((double)tp.tv_sec + (double)tp.tv_usec * 1.e-6);
-}
 
-// -----------------------------------------------------------
-// Result verification
-// -----------------------------------------------------------
 void checkResult(float *hostRef, float *gpuRef, const int N)
 {
     double epsilon = 1.0E-8;
-    bool match = true;
+    bool match = 1;
 
     for (int i = 0; i < N; i++)
     {
-        if (fabs(hostRef[i] - gpuRef[i]) > epsilon)
+        if (abs(hostRef[i] - gpuRef[i]) > epsilon)
         {
-            match = false;
+            match = 0;
             printf("Arrays do not match!\n");
             printf("host %5.2f gpu %5.2f at current %d\n", hostRef[i],
                    gpuRef[i], i);
@@ -83,25 +65,24 @@ void checkResult(float *hostRef, float *gpuRef, const int N)
     }
 
     if (match) printf("Arrays match.\n\n");
+
+    return;
 }
 
-// -----------------------------------------------------------
-// Initialize data
-// -----------------------------------------------------------
 void initialData(float *ip, int size)
 {
+    // generate different seed for random number
     time_t t;
     srand((unsigned) time(&t));
 
     for (int i = 0; i < size; i++)
     {
-        ip[i] = (float)(rand() & 0xFF) / 10.0f;
+        ip[i] = (float)( rand() & 0xFF ) / 10.0f;
     }
+
+    return;
 }
 
-// -----------------------------------------------------------
-// CPU version
-// -----------------------------------------------------------
 void sumArraysOnHost(float *A, float *B, float *C, const int N)
 {
     for (int idx = 0; idx < N; idx++)
@@ -110,19 +91,19 @@ void sumArraysOnHost(float *A, float *B, float *C, const int N)
     }
 }
 
-// -----------------------------------------------------------
-// GPU Kernel
-// -----------------------------------------------------------
-__global__ void sumArraysOnGPU(float *A, float *B, float *C, const int N)
-{
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < N)
-        C[i] = A[i] + B[i];
+
+__global__ void sumArraysOnGPU(float *A, float *B, float *C, const int N){
+    int i = blockIdx.x*blockDim.x+threadIdx.x;
+    if (i<N) C[i] = A[i] + B[i];
 }
 
-// -----------------------------------------------------------
-// Main program
-// -----------------------------------------------------------
+double seconds() {
+struct timeval tp;
+gettimeofday(&tp,NULL);
+return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
+}
+
+
 int main(int argc, char **argv)
 {
     printf("%s Starting...\n", argv[0]);
@@ -135,9 +116,10 @@ int main(int argc, char **argv)
     CHECK(cudaSetDevice(dev));
 
     // set up data size of vectors
-    int nElem = 1 << 24; // ~16 million elements
+    int nElem = 1 << 24;
     printf("Vector size %d\n", nElem);
 
+    // malloc host memory
     size_t nBytes = nElem * sizeof(float);
 
     float *h_A, *h_B, *hostRef, *gpuRef;
@@ -148,54 +130,54 @@ int main(int argc, char **argv)
 
     double iStart, iElaps;
 
-    // initialize data
+    // initialize data at host side
     iStart = seconds();
     initialData(h_A, nElem);
     initialData(h_B, nElem);
     iElaps = seconds() - iStart;
     printf("initialData Time elapsed %f sec\n", iElaps);
-
     memset(hostRef, 0, nBytes);
     memset(gpuRef,  0, nBytes);
 
-    // sum on host
+    // add vector at host side for result checks
     iStart = seconds();
     sumArraysOnHost(h_A, h_B, hostRef, nElem);
     iElaps = seconds() - iStart;
     printf("sumArraysOnHost Time elapsed %f sec\n", iElaps);
 
-    // malloc device memory
+    // malloc device global memory
     float *d_A, *d_B, *d_C;
     CHECK(cudaMalloc((float**)&d_A, nBytes));
     CHECK(cudaMalloc((float**)&d_B, nBytes));
     CHECK(cudaMalloc((float**)&d_C, nBytes));
 
-    // copy data from host to device
+    // transfer data from host to device
     CHECK(cudaMemcpy(d_A, h_A, nBytes, cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(d_B, h_B, nBytes, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(d_C, gpuRef, nBytes, cudaMemcpyHostToDevice));
 
-    // launch kernel
-    int blockSize = 512;
-    dim3 block(blockSize);
-    dim3 grid((nElem + block.x - 1) / block.x);
+    // invoke kernel at host side
+    int iLen = 512;
+    dim3 block (iLen);
+    dim3 grid  ((nElem + block.x - 1) / block.x);
 
     iStart = seconds();
     sumArraysOnGPU<<<grid, block>>>(d_A, d_B, d_C, nElem);
     CHECK(cudaDeviceSynchronize());
     iElaps = seconds() - iStart;
-    printf("sumArraysOnGPU <<<%d, %d>>> Time elapsed %f sec\n",
-           grid.x, block.x, iElaps);
+    printf("sumArraysOnGPU <<<  %d, %d  >>>  Time elapsed %f sec\n", grid.x,
+           block.x, iElaps);
 
     // check kernel error
-    CHECK(cudaGetLastError());
+    CHECK(cudaGetLastError()) ;
 
-    // copy result back to host
+    // copy kernel result back to host side
     CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
 
-    // verify result
+    // check device results
     checkResult(hostRef, gpuRef, nElem);
 
-    // free device memory
+    // free device global memory
     CHECK(cudaFree(d_A));
     CHECK(cudaFree(d_B));
     CHECK(cudaFree(d_C));
@@ -206,13 +188,13 @@ int main(int argc, char **argv)
     free(hostRef);
     free(gpuRef);
 
-    return 0;
+    return(0);
 }
+
 ~~~
+
 ## OUTPUT:
-<img width="1607" height="191" alt="image" src="https://github.com/user-attachments/assets/4f54ce75-a76b-4098-966f-2b50b5a3c93f" />
-
-
+<img width="1367" height="165" alt="image" src="https://github.com/user-attachments/assets/a418907a-6810-4c27-a6ba-fab6d882584e" />
 
 
 ## RESULT:
